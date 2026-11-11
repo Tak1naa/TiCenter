@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: exam-bank-java
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - core-service:39180
+  - job_name: qdrant
+    metrics_path: /metrics
+    static_configs:
+      - targets: [qdrant:6333]

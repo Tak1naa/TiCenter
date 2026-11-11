@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: chat-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+
+server:
+  port: 8083
+
+app:
+  mail:
+    delivery-enabled: ${MAIL_DELIVERY_ENABLED:true}
+  session:
+    redis-required: ${SESSION_REDIS_REQUIRED:false}
+  chat:
+    max-active: ${CHAT_MAX_ACTIVE:128}
+    max-waiting: ${CHAT_MAX_WAITING:512}
+    max-wait-seconds: ${CHAT_MAX_WAIT_SECONDS:30}
+    provider-max-active: ${CHAT_PROVIDER_MAX_ACTIVE:32}
+  embedding:
+    service-url: ${EMBEDDING_SERVICE_URL:http://localhost:8002}
+  llm:
+    gateway-url: ${LLM_GATEWAY_URL:http://localhost:8003}
+  rag:
+    qdrant-enabled: ${RAG_QDRANT_ENABLED:true}
+    top-k: 5
+    similarity-threshold: 0.3
+  prompt:
+    context-max-tokens: ${PROMPT_CONTEXT_MAX_TOKENS:5000}
+    history-max-tokens: ${PROMPT_HISTORY_MAX_TOKENS:1200}
+    question-max-tokens: ${PROMPT_QUESTION_MAX_TOKENS:800}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      llm:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+  bulkhead:
+    instances:
+      llm:
+        max-concurrent-calls: 128
+        max-wait-duration: 0

@@ -1,0 +1,78 @@
+spring:
+  application:
+    name: vector-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+
+server:
+  port: 8082
+
+app:
+  embedding:
+    service-url: ${EMBEDDING_SERVICE_URL:http://localhost:8002}
+    model: ${EMBED_MODEL:BAAI/bge-m3}
+  vector:
+    snapshot-path: ${APP_VECTOR_SNAPSHOT_PATH:}
+  qdrant:
+    url: ${QDRANT_URL:http://localhost:6333}
+    collection: ${QDRANT_COLLECTION:exam_chunks_bge_m3_1024_v1}
+    api-key: ${QDRANT_API_KEY:}
+    dense-dimensions: ${EMBEDDING_DIMENSIONS:1024}
+    validate-on-startup: ${QDRANT_VALIDATE_ON_STARTUP:true}
+  reranker:
+    enabled: ${RERANK_ENABLED:false}
+    url: ${RERANK_URL:}
+    api-key: ${RERANK_API_KEY:}
+    model: ${RERANK_MODEL:BAAI/bge-reranker-v2-m3}
+    output-count: ${RERANK_OUTPUT_COUNT:8}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      embedding:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+      sparseEmbedding:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+      qdrant:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 15s
+      reranker:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+  bulkhead:
+    instances:
+      embedding:
+        max-concurrent-calls: 32
+      sparseEmbedding:
+        max-concurrent-calls: 32
+      qdrant:
+        max-concurrent-calls: 128
+      reranker:
+        max-concurrent-calls: 32

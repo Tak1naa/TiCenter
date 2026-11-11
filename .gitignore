@@ -1,0 +1,49 @@
+# ── 敏感数据（绝不提交）──
+data/
+backups/
+*.sql
+!backend/common/src/main/resources/db/migration/*.sql
+!scripts/init-db.sql
+*.sql.gz
+*.age
+*.key
+*.pem
+*.env
+.env.local
+.env.*.local
+!*.env.example
+
+# ── 构建产物 ──
+backend/**/target/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+.vite/
+*.jar
+*.war
+
+# ── IDE / 编辑器 ──
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# ── 日志 / 临时 ──
+*.log
+logs/
+tmp/
+/tmp/
+*.pid
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# RAG evaluation data can contain excerpts from course material.
+rag-eval/silver.draft.json
+rag-eval/gold.min.json
+rag-eval/runs/
+reports/glm-vision-*.json

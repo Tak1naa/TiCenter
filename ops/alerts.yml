@@ -1,0 +1,23 @@
+groups:
+  - name: exam-bank-slo
+    rules:
+      - alert: CoreServiceDown
+        expr: up{job="exam-bank-java"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "题库核心服务不可用"}
+      - alert: ChatQueueSaturated
+        expr: chat_admission_waiting > 400
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: "聊天等待队列接近上限"}
+      - alert: ChatRejectingRequests
+        expr: rate(chat_admission_rejected_total[5m]) > 1
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "聊天持续过载并返回 429"}
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "Qdrant 不可用，RAG 将降级"}

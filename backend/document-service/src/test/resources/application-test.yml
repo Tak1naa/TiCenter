@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:exam_bank;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+  h2:
+    console:
+      enabled: true
+
+app:
+  exam-bank:
+    root-path: /home/takina/AiQuestionBank/data/exam-bank
+  scan:
+    enabled: false
+    cron: "-"
+  ocr:
+    service-url: http://127.0.0.1:9
+  vector:
+    service-url: http://127.0.0.1:9
+  parse:
+    paused: true

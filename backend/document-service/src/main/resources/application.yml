@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: document-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  cache:
+    type: caffeine
+    cache-names: file-tree
+    caffeine:
+      spec: maximumSize=256,expireAfterWrite=30s
+
+server:
+  port: 8081
+
+app:
+  exam-bank:
+    root-path: ${EXAM_BANK_ROOT:/home/takina/AiQuestionBank/data/exam-bank}
+  ocr:
+    service-url: ${OCR_SERVICE_URL:http://localhost:8001}
+  vector:
+    service-url: ${VECTOR_SERVICE_URL:http://localhost:8082}
+  scan:
+    cron: "0 0 2 * * ?"
+    enabled: true
+  upload:
+    clamav-host: ${CLAMAV_HOST:}
+    clamav-port: ${CLAMAV_PORT:3310}
+    clamav-required: ${CLAMAV_REQUIRED:false}
+  parse:
+    paused: ${PARSE_PAUSED:false}
+    poll-ms: ${PARSE_POLL_MS:1000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      ocr:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+  bulkhead:
+    instances:
+      ocr:
+        max-concurrent-calls: 2

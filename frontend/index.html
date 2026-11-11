@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AI 智能题库 - 基于RAG的智能备考平台" />
+
+    <!--
+      CSP: 'unsafe-inline' 是 Vite HMR + 内联主题脚本的必要代价。
+      生产环境部署时建议通过 Nginx/Caddy 反向代理设置更强 CSP，
+      或使用 SRI hash 替代 'unsafe-inline'。
+      frame-ancestors: 'none' 防御 clickjacking。
+    -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; connect-src 'self' http://localhost:* ws://localhost:*; media-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" />
+
+    <!-- 生产部署时应由反向代理设置 Strict-Transport-Security -->
+    <!-- 例如 Nginx: add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always; -->
+
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!-- 禁止浏览器 MIME 类型嗅探 -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <!-- 限制浏览器功能权限 -->
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), interest-cohort=()" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>^</text></svg>" />
+    <title>AI 智能题库</title>
+
+    <!-- 防 FOUC: 渲染前设置主题，此脚本必须有 'unsafe-inline' 或 nonce -->
+    <script>
+      (function() {
+        var mode = localStorage.getItem('theme-mode');
+        if (mode === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+          return;
+        }
+        if (mode === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          return;
+        }
+        // auto or unset: check system preference first, then sunrise/sunset
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          return;
+        }
+        var h = new Date().getHours();
+        document.documentElement.setAttribute('data-theme', (h >= 19 || h < 6) ? 'dark' : 'light');
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

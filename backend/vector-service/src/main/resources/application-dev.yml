@@ -1,0 +1,33 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: exam_bank
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+
+server:
+  port: 39182
+
+app:
+  embedding:
+    service-url: http://localhost:8002
+    model: ${EMBED_MODEL:BAAI/bge-m3}
+  vector:
+    snapshot-path: ${APP_VECTOR_SNAPSHOT_PATH:}
+  qdrant:
+    url: ${QDRANT_URL:http://localhost:6333}
+    collection: ${QDRANT_COLLECTION:exam_chunks_bge_m3_1024_v1}
+    api-key: ${QDRANT_API_KEY:}
+    dense-dimensions: ${EMBEDDING_DIMENSIONS:1024}
+    validate-on-startup: ${QDRANT_VALIDATE_ON_STARTUP:false}

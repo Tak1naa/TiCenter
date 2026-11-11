@@ -1,0 +1,332 @@
+version: "3.9"
+
+# AI 智能题库 - PVE Docker 部署
+# 使用: docker compose up -d --build
+# 前置: 构建后端 jar (cd backend && mvn clean package -DskipTests)
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: exam-bank-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: exam_bank
+      MYSQL_USER: exam_bank
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks: [exam-bank-net]
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      retries: 10
+    mem_limit: 3g
+
+  redis:
+    image: redis:8.8.0-alpine
+    container_name: exam-bank-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    expose: ["6379"]
+    networks: [exam-bank-net]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    mem_limit: 640m
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    container_name: exam-bank-qdrant
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+    volumes:
+      - qdrant-data:/qdrant/storage
+    expose: ["6333", "6334"]
+    networks: [exam-bank-net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333'"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    mem_limit: 2g
+
+  ocr-service:
+    build: ./ai-services/ocr-service
+    container_name: exam-bank-ocr
+    restart: unless-stopped
+    environment:
+      API_SERVICE_TOKEN: ${API_SERVICE_TOKEN:?API_SERVICE_TOKEN is required}
+      EXAM_BANK_ROOT: /data/exam-bank
+      OCR_CACHE_DIR: /tmp/ocr-cache
+      SOFFICE_BIN: soffice
+      LO_TMP_DIR: /tmp/lo-tmp
+      # 配置后 PDF/图片优先走 MinerU 解析（公式/表格/扫描件质量最佳），留空 = 不启用
+      MINERU_URL: ${MINERU_URL:-}
+      MINERU_BACKEND: ${MINERU_BACKEND:-pipeline}
+    volumes:
+      - ./data/exam-bank:/data/exam-bank:ro
+    networks: [exam-bank-net]
+    expose: ["8001"]
+    mem_limit: 2g
+    cpus: 2
+
+  # MinerU 高质量解析（可选，默认不启动）：
+  #   1. .env 设置 MINERU_URL=http://mineru:8000
+  #   2. docker compose --profile mineru up -d --build mineru
+  # CPU 版镜像；模型首次解析时经 ModelScope 自动下载（数 GB），缓存于 mineru-models 卷
+  mineru:
+    build: ./ai-services/mineru
+    container_name: exam-bank-mineru
+    restart: unless-stopped
+    profiles: ["mineru"]
+    volumes:
+      - mineru-models:/root/.cache
+    networks: [exam-bank-net]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  embedding-service:
+    build: ./ai-services/embedding-service
+    container_name: exam-bank-embedding
+    restart: unless-stopped
+    environment:
+      API_SERVICE_TOKEN: ${API_SERVICE_TOKEN:?API_SERVICE_TOKEN is required}
+      SILICONFLOW_API_KEY: ${EMBEDDING_API_KEY}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://api.siliconflow.cn/v1}
+      EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
+      ALLOW_HASH_FALLBACK: "false"
+    networks: [exam-bank-net]
+    expose: ["8002"]
+    mem_limit: 1g
+
+  llm-gateway:
+    build: ./ai-services/llm-gateway
+    container_name: exam-bank-llm
+    restart: unless-stopped
+    environment:
+      API_SERVICE_TOKEN: ${API_SERVICE_TOKEN:?API_SERVICE_TOKEN is required}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      SILICONFLOW_API_KEY: ${EMBEDDING_API_KEY:-}
+      ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+      ALLOW_CUSTOM_PROVIDER_DOMAINS: ${ALLOW_CUSTOM_PROVIDER_DOMAINS:-false}
+      INTERNAL_IMAGE_HOSTS: ocr-service
+    networks: [exam-bank-net]
+    expose: ["8003"]
+    mem_limit: 512m
+
+  document-service:
+    build: ./backend
+    container_name: exam-bank-document
+    restart: unless-stopped
+    profiles: ["legacy-services"]
+    command: ["java", "-jar", "/app/document-service.jar", "--spring.profiles.active=dev"]
+    environment:
+      API_SERVICE_TOKEN: ${API_SERVICE_TOKEN:?API_SERVICE_TOKEN is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&sslMode=REQUIRED&allowPublicKeyRetrieval=false
+      EXAM_BANK_ROOT: /data/exam-bank
+      VECTOR_SERVICE_URL: http://vector-service:39182
+      PARSE_PAUSED: ${PARSE_PAUSED:-false}
+      CLAMAV_HOST: ${CLAMAV_HOST:-}
+      CLAMAV_REQUIRED: ${CLAMAV_REQUIRED:-false}
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx768m -XX:MaxMetaspaceSize=192m
+    volumes:
+      - ./data/exam-bank:/data/exam-bank
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [exam-bank-net]
+    expose: ["39181"]
+    mem_limit: 1g
+
+  vector-service:
+    build: ./backend
+    container_name: exam-bank-vector
+    restart: unless-stopped
+    profiles: ["legacy-services"]
+    command: ["java", "-jar", "/app/vector-service.jar", "--spring.profiles.active=dev"]
+    environment:
+      API_SERVICE_TOKEN: ${API_SERVICE_TOKEN:?API_SERVICE_TOKEN is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&sslMode=REQUIRED&allowPublicKeyRetrieval=false
+      APP_EMBEDDING_SERVICE_URL: http://embedding-service:8002
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+      EMBED_MODEL: ${EMBED_MODEL:-BAAI/bge-m3}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-exam_chunks_bge_m3_1024_v1}
+      RERANK_ENABLED: ${RERANK_ENABLED:-false}
+      RERANK_URL: ${RERANK_URL:-}
+      RERANK_API_KEY: ${RERANK_API_KEY:-}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx768m -XX:MaxMetaspaceSize=192m
+    depends_on:
+      mysql:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks: [exam-bank-net]
+    expose: ["39182"]
+    mem_limit: 1g
+
+  chat-service:
+    build: ./backend
+    container_name: exam-bank-chat
+    restart: unless-stopped
+    profiles: ["legacy-services"]
+    command: ["java", "-jar", "/app/chat-service.jar", "--spring.profiles.active=dev"]
+    environment:
+      API_SERVICE_TOKEN: ${API_SERVICE_TOKEN:?API_SERVICE_TOKEN is required}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:?ADMIN_SEED_PASSWORD is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&sslMode=REQUIRED&allowPublicKeyRetrieval=false
+      APP_OCR_SERVICE_URL: http://ocr-service:8001
+      APP_EMBEDDING_SERVICE_URL: http://embedding-service:8002
+      APP_LLM_GATEWAY_URL: http://llm-gateway:8003
+      APP_DOCUMENT_SERVICE_URL: http://document-service:39181
+      APP_VECTOR_SERVICE_URL: http://vector-service:39182
+      APP_EXAMBANKROOTPATH: /data/exam-bank
+      TRUST_PROXY_HEADERS: "true"
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      CONFIG_ENCRYPTION_KEY: ${CONFIG_ENCRYPTION_KEY:?CONFIG_ENCRYPTION_KEY is required}
+      SESSION_REDIS_REQUIRED: "true"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CHAT_MAX_ACTIVE: ${CHAT_MAX_ACTIVE:-128}
+      CHAT_MAX_WAITING: ${CHAT_MAX_WAITING:-512}
+      CHAT_MAX_WAIT_SECONDS: ${CHAT_MAX_WAIT_SECONDS:-30}
+      PROMPT_CONTEXT_MAX_CHARS: ${PROMPT_CONTEXT_MAX_CHARS:-12000}
+      PROMPT_HISTORY_MAX_CHARS: ${PROMPT_HISTORY_MAX_CHARS:-4000}
+      RAG_QDRANT_ENABLED: "true"
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx1536m -XX:MaxMetaspaceSize=256m
+    volumes:
+      - ./data/exam-bank:/data/exam-bank:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [exam-bank-net]
+    expose: ["39183"]
+    mem_limit: 2g
+
+  core-service:
+    build: ./backend
+    container_name: exam-bank-core
+    restart: unless-stopped
+    environment:
+      API_SERVICE_TOKEN: ${API_SERVICE_TOKEN:?API_SERVICE_TOKEN is required}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:?ADMIN_SEED_PASSWORD is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&sslMode=REQUIRED&allowPublicKeyRetrieval=false
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      CONFIG_ENCRYPTION_KEY: ${CONFIG_ENCRYPTION_KEY:?CONFIG_ENCRYPTION_KEY is required}
+      SESSION_REDIS_REQUIRED: "true"
+      EXAM_BANK_ROOT: /data/exam-bank
+      OCR_SERVICE_URL: http://ocr-service:8001
+      EMBEDDING_SERVICE_URL: http://embedding-service:8002
+      LLM_GATEWAY_URL: http://llm-gateway:8003
+      CORE_SELF_URL: http://core-service:39180
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-exam_chunks_bge_m3_1024_v1}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
+      TRUST_PROXY_HEADERS: "true"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PARSE_PAUSED: ${PARSE_PAUSED:-false}
+      CHAT_MAX_ACTIVE: ${CHAT_MAX_ACTIVE:-128}
+      CHAT_MAX_WAITING: ${CHAT_MAX_WAITING:-512}
+      CHAT_MAX_WAIT_SECONDS: ${CHAT_MAX_WAIT_SECONDS:-30}
+      PROMPT_CONTEXT_MAX_CHARS: ${PROMPT_CONTEXT_MAX_CHARS:-12000}
+      PROMPT_HISTORY_MAX_CHARS: ${PROMPT_HISTORY_MAX_CHARS:-4000}
+      RERANK_ENABLED: ${RERANK_ENABLED:-false}
+      RERANK_URL: ${RERANK_URL:-}
+      RERANK_API_KEY: ${RERANK_API_KEY:-}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      CLAMAV_HOST: ${CLAMAV_HOST:-}
+      CLAMAV_REQUIRED: ${CLAMAV_REQUIRED:-false}
+      JAVA_TOOL_OPTIONS: -Xms512m -Xmx2560m -XX:MaxMetaspaceSize=384m
+    volumes:
+      - ./data/exam-bank:/data/exam-bank
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      qdrant: {condition: service_healthy}
+    networks:
+      exam-bank-net:
+        aliases: [document-service, vector-service, chat-service]
+    expose: ["39180"]
+    mem_limit: 3g
+
+  frontend:
+    build: ./frontend
+    container_name: exam-bank-frontend
+    restart: unless-stopped
+    environment:
+      API_SERVICE_TOKEN: ${API_SERVICE_TOKEN:?API_SERVICE_TOKEN is required}
+    depends_on:
+      - core-service
+      - ocr-service
+      - llm-gateway
+    networks: [exam-bank-net]
+    ports:
+      - "80:80"
+    mem_limit: 256m
+
+  prometheus:
+    image: prom/prometheus:v3.12.0-distroless
+    container_name: exam-bank-prometheus
+    profiles: ["observability"]
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d", "--storage.tsdb.retention.size=2GB"]
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    expose: ["9090"]
+    networks: [exam-bank-net]
+    mem_limit: 768m
+
+  grafana:
+    image: grafana/grafana:13.1.0
+    container_name: exam-bank-grafana
+    profiles: ["observability"]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required for observability profile}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./ops/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [exam-bank-net]
+    mem_limit: 512m
+
+networks:
+  exam-bank-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
+  qdrant-data:
+  mineru-models:
+  prometheus-data:
+  grafana-data:

@@ -1,0 +1,6 @@
+fastapi==0.162.2
+uvicorn==0.54.0
+httpx==0.28.1
+llama-index-core==0.14.25
+llama-index-vector-stores-qdrant==0.10.4
+qdrant-client==1.20.0

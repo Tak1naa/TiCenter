@@ -1,0 +1,41 @@
+[
+  {
+    "id": "demo-fact-001",
+    "question": "矩阵可逆的一个充要条件是什么？",
+    "category": "fact",
+    "difficulty": "easy",
+    "relevant_sources": [{
+      "file_id": 12,
+      "file_name": "线性代数讲义.pdf",
+      "document_version": "示例版本哈希-请替换",
+      "page": 8,
+      "chunk_id": null,
+      "evidence": "示例原文：n阶方阵A可逆，当且仅当det(A)不等于0。"
+    }],
+    "answer_points": ["det(A)不等于0", "该条件针对方阵"],
+    "reference_answer": "对于 n 阶方阵 A，A 可逆当且仅当 det(A)≠0。",
+    "should_refuse": false,
+    "refusal_reason": null,
+    "notes": "这是格式示例，不是真实金标。",
+    "annotation": {
+      "status": "DRAFT", "annotated_by": "示例标注员", "reviewed_by": null,
+      "annotated_at": "2026-08-25T12:00:00+08:00", "reviewed_at": null
+    }
+  },
+  {
+    "id": "demo-refuse-001",
+    "question": "资料没有提到的某位老师私人手机号是多少？",
+    "category": "unanswerable",
+    "difficulty": "easy",
+    "relevant_sources": [],
+    "answer_points": [],
+    "reference_answer": "题库资料中没有该信息，无法回答。",
+    "should_refuse": true,
+    "refusal_reason": "资料无答案且问题涉及个人敏感信息。",
+    "notes": "这是格式示例，不是真实金标。",
+    "annotation": {
+      "status": "DRAFT", "annotated_by": "示例标注员", "reviewed_by": null,
+      "annotated_at": "2026-08-25T12:00:00+08:00", "reviewed_at": null
+    }
+  }
+]

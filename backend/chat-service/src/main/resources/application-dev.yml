@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/exam_bank?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: exam_bank
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+
+server:
+  port: 39183
+
+app:
+  mail:
+    delivery-enabled: ${MAIL_DELIVERY_ENABLED:false}
+  embedding:
+    service-url: http://localhost:8002
+  vector:
+    service-url: http://localhost:39182
+  llm:
+    gateway-url: http://localhost:8003
+  rag:
+    qdrant-enabled: ${RAG_QDRANT_ENABLED:true}
+    top-k: 5
+    # 与默认配置一致：0.3 相似度阈值（hash 降级时向量无意义，靠关键词降级而非低阈值放行）
+    similarity-threshold: 0.3
+  prompt:
+    context-max-tokens: ${PROMPT_CONTEXT_MAX_TOKENS:5000}
+    history-max-tokens: ${PROMPT_HISTORY_MAX_TOKENS:1200}
+    question-max-tokens: ${PROMPT_QUESTION_MAX_TOKENS:800}
